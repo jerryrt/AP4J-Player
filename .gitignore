@@ -1,0 +1,36 @@
+**/*.DS_Store
+**/target
+**/com_crashlytics_export_string.xml
+**/com_crashlytics_export_strings.xml
+**/.crashlytics_data
+**/.google_apis
+**/.apt_generated
+**/assets/crashlytics-build.properties
+
+**/assets/**/tmp
+**/local.properties
+
+# generated files
+**/bin
+**/gen
+
+# Windows thumbnail db
+**/Thumbs.db
+
+# Android Studio
+#.idea
+**/.idea/workspace.xml
+**/.gradle
+
+**/out
+**/build
+**/production
+**/*.iws
+**/*.ipr
+**/*~
+**/*.swp
+
+/target
+
+.idea/libraries
+**/*.iml
