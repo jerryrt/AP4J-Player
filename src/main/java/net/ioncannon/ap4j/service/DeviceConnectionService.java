@@ -8,11 +8,18 @@ import net.ioncannon.ap4j.model.DeviceConnection;
 import net.ioncannon.ap4j.model.Device;
 import net.ioncannon.ap4j.model.DeviceResponse;
 
+import java.io.IOException;
 import java.io.Serializable;
 import java.net.URLDecoder;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.HashMap;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
+import javax.jmdns.JmDNS;
+import javax.jmdns.ServiceListener;
 import javax.xml.ws.Service;
 
 /**
@@ -39,6 +46,8 @@ import javax.xml.ws.Service;
 
 public class DeviceConnectionService {
 
+    private static Logger logger = Logger.getLogger(DeviceConnectionService.class.getName());
+
     public static class ServiceResponse {
         public boolean success = true;
         public Map<String, String> dataMap = new HashMap<String, String>();
@@ -49,8 +58,70 @@ public class DeviceConnectionService {
         static ServiceResponse OK = new ServiceResponse();
     }
 
+    public static interface DeviceStatusAware {
+        public void deviceConnected(Device d);
+        public void deviceDisconnected(Device d);
+    }
+
+    private static List<DeviceStatusAware> deviceListeners = new ArrayList<DeviceStatusAware>();
     private static Map<String, Device> deviceMap = new HashMap<String, Device>();
     private static Map<String, DeviceConnection> deviceConnectionMap = new HashMap<String, DeviceConnection>();
+    private static ServiceListener airplayServiceListener = new AirPlayJmDNSServiceListener();
+
+    private static JmDNS jmDNS = null;
+
+    private static Thread jmDNSRunner = null;
+
+    public static void registerDeviceListener(DeviceStatusAware dsa) {
+        logger.info("add new device status listener: " + dsa);
+        deviceListeners.add(dsa);
+
+        if (jmDNSRunner == null) {
+            jmDNSRunner = new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    try
+                    {
+                        jmDNS = JmDNS.create();
+                        logger.info(Thread.currentThread() + ": created jmDNS service " + jmDNS);
+                        jmDNS.addServiceListener("_airplay._tcp.local.", airplayServiceListener);
+                        logger.info(Thread.currentThread() + ": started jmDNS service " + jmDNS);
+                    }
+                    catch (Exception e)
+                    {
+                        logger.log(Level.SEVERE, e.getMessage(), e);
+                    }
+
+                    logger.info(Thread.currentThread() + ": reach end of life with jmDNS service " + jmDNS);
+                }
+            });
+            jmDNSRunner.start();
+        }
+
+    }
+
+    public static void unregisterDeviceListener(DeviceStatusAware dsa) {
+        deviceListeners.remove(dsa);
+
+        if (deviceListeners.isEmpty() && jmDNS != null) {
+            final JmDNS tdJmDNS = jmDNS;
+
+            jmDNS = null;
+            jmDNSRunner = null;
+
+            new Thread() {
+                public void run() {
+                    try {
+                        tdJmDNS.removeServiceListener("_airplay._tcp.local.", airplayServiceListener);
+                        tdJmDNS.close();
+                        logger.info(Thread.currentThread() + ": closed jmDNS service " + tdJmDNS + ".");
+                    } catch (Exception e) {
+                        logger.log(Level.WARNING, e.getMessage(), e);
+                    }
+                }
+            }.start();
+        }
+    }
 
     public static DeviceConnection getConnection(Device device) {
         if (!deviceConnectionMap.containsKey(device.getId())) {
@@ -60,8 +131,13 @@ public class DeviceConnectionService {
     }
 
     public static void addDevice(Device device) {
-        if (!deviceMap.containsKey(device.getId())) {
-            deviceMap.put(device.getId(), device);
+
+        logger.info("Adding device: " + device);
+
+        deviceMap.put(device.getId(), device);
+
+        for (DeviceStatusAware dsa : deviceListeners) {
+            dsa.deviceConnected(device);
         }
     }
 
@@ -73,6 +149,11 @@ public class DeviceConnectionService {
             {
                 deviceConnection.close();
             }
+
+            for (DeviceStatusAware dsa : deviceListeners) {
+                dsa.deviceDisconnected(removedDevice);
+            }
+
         }
     }
 

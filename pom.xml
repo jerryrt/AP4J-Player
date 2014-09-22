@@ -6,7 +6,7 @@
 
     <groupId>net.ioncannnon</groupId>
     <artifactId>ap4j</artifactId>
-    <version>0.0.1-SNAPSHOT</version>
+    <version>0.0.5-SNAPSHOT</version>
 
     <build>
         <plugins>
